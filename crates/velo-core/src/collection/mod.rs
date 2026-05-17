@@ -2,23 +2,30 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
+use uuid::Uuid;
 use crate::error::{Result, VeloError};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Request {
+    #[serde(default)]
     pub id: String,
     pub name: String,
     pub method: String,
     pub url: String,
+    #[serde(default)]
     pub headers: HashMap<String, String>,
+    #[serde(default)]
     pub body: Option<serde_json::Value>,
+    #[serde(default)]
     pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Collection {
     pub name: String,
+    #[serde(default)]
     pub description: Option<String>,
+    #[serde(default)]
     pub requests: Vec<Request>,
 }
 
@@ -36,7 +43,12 @@ impl CollectionManager {
         let content = fs::read_to_string(&path).await.map_err(|_| {
             VeloError::CollectionNotFound(name.to_string())
         })?;
-        let collection = serde_yaml::from_str(&content)?;
+        let mut collection: Collection = serde_yaml::from_str(&content)?;
+        for request in &mut collection.requests {
+            if request.id.trim().is_empty() {
+                request.id = Uuid::new_v4().to_string();
+            }
+        }
         Ok(collection)
     }
 
@@ -51,6 +63,9 @@ impl CollectionManager {
 
     pub async fn list(&self) -> Result<Vec<String>> {
         let dir = self.base_path.join("collections");
+        if !dir.exists() {
+            return Ok(vec![]);
+        }
         let mut names = Vec::new();
         let mut entries = fs::read_dir(&dir).await?;
         while let Some(entry) = entries.next_entry().await? {
