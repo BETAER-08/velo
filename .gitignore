@@ -1,0 +1,7 @@
+/target
+/ui/node_modules
+/ui/dist
+.DS_Store
+*.env.local
+.velo/environments/prod.yaml
+.idea/
