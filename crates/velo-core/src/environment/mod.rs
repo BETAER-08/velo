@@ -39,6 +39,9 @@ impl EnvironmentManager {
 
     pub async fn list(&self) -> Result<Vec<String>> {
         let dir = self.base_path.join("environments");
+        if !dir.exists() {
+            return Ok(vec![]);
+        }
         let mut names = Vec::new();
         let mut entries = fs::read_dir(&dir).await?;
         while let Some(entry) = entries.next_entry().await? {
@@ -52,10 +55,13 @@ impl EnvironmentManager {
         Ok(names)
     }
 
-    pub fn resolve(template: &str, env: &Environment) -> Result<String> {
+    pub fn resolve_strict(template: &str, env: &Environment) -> Result<String> {
         let mut result = template.to_string();
         let mut search_start = 0;
         loop {
+            if search_start > result.len() {
+                break;
+            }
             let remaining = &result[search_start..];
             let Some(open) = remaining.find("{{") else { break };
             let abs_open = search_start + open;
@@ -71,5 +77,34 @@ impl EnvironmentManager {
             search_start = abs_open + replacement.len();
         }
         Ok(result)
+    }
+
+    pub fn resolve_lenient(template: &str, env: &Environment) -> String {
+        let mut result = template.to_string();
+        let mut search_start = 0;
+        loop {
+            if search_start > result.len() {
+                break;
+            }
+            let remaining = &result[search_start..];
+            let Some(open) = remaining.find("{{") else { break };
+            let abs_open = search_start + open;
+            let after_open = abs_open + 2;
+            let Some(close) = result[after_open..].find("}}") else { break };
+            let abs_close = after_open + close;
+            let key = result[after_open..abs_close].trim();
+            match env.values.get(key) {
+                Some(value) => {
+                    let replacement = value.clone();
+                    let new_start = abs_open + replacement.len();
+                    result.replace_range(abs_open..abs_close + 2, &replacement);
+                    search_start = new_start;
+                }
+                None => {
+                    search_start = abs_close + 2;
+                }
+            }
+        }
+        result
     }
 }

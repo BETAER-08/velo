@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use crate::collection::Request;
 use crate::environment::{Environment, EnvironmentManager};
@@ -18,31 +18,38 @@ pub struct Executor {
 }
 
 impl Executor {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         let client = reqwest::Client::builder()
             .use_rustls_tls()
-            .build()
-            .expect("failed to build reqwest client");
-        Self { client }
+            .timeout(Duration::from_secs(30))
+            .build()?;
+        Ok(Self { client })
     }
 
     pub async fn execute(&self, request: &Request, env: &Environment) -> Result<RequestResult> {
-        let url = EnvironmentManager::resolve(&request.url, env)?;
+        let url = EnvironmentManager::resolve_lenient(&request.url, env);
 
         let method = reqwest::Method::from_bytes(request.method.to_uppercase().as_bytes())
             .unwrap_or(reqwest::Method::GET);
 
         let mut builder = self.client.request(method, &url);
 
+        let mut has_content_type = false;
         for (key, value) in &request.headers {
-            let resolved_key = EnvironmentManager::resolve(key, env)?;
-            let resolved_value = EnvironmentManager::resolve(value, env)?;
+            let resolved_key = EnvironmentManager::resolve_lenient(key, env);
+            let resolved_value = EnvironmentManager::resolve_lenient(value, env);
+            if resolved_key.eq_ignore_ascii_case("content-type") {
+                has_content_type = true;
+            }
             builder = builder.header(resolved_key, resolved_value);
         }
 
         if let Some(body) = &request.body {
+            if !has_content_type {
+                builder = builder.header("Content-Type", "application/json");
+            }
             let body_str = serde_json::to_string(body)?;
-            let resolved_body = EnvironmentManager::resolve(&body_str, env)?;
+            let resolved_body = EnvironmentManager::resolve_lenient(&body_str, env);
             builder = builder.body(resolved_body);
         }
 
@@ -66,11 +73,5 @@ impl Executor {
             body,
             duration_ms,
         })
-    }
-}
-
-impl Default for Executor {
-    fn default() -> Self {
-        Self::new()
     }
 }
