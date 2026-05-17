@@ -36,7 +36,12 @@ impl CollectionManager {
         let content = fs::read_to_string(&path).await.map_err(|_| {
             VeloError::CollectionNotFound(name.to_string())
         })?;
-        let collection = serde_yaml::from_str(&content)?;
+        let mut collection: Collection = serde_yaml::from_str(&content)?;
+        for req in &mut collection.requests {
+            if req.id.is_empty() {
+                req.id = uuid::Uuid::new_v4().to_string();
+            }
+        }
         Ok(collection)
     }
 
@@ -51,6 +56,9 @@ impl CollectionManager {
 
     pub async fn list(&self) -> Result<Vec<String>> {
         let dir = self.base_path.join("collections");
+        if !dir.exists() {
+            return Ok(vec![]);
+        }
         let mut names = Vec::new();
         let mut entries = fs::read_dir(&dir).await?;
         while let Some(entry) = entries.next_entry().await? {

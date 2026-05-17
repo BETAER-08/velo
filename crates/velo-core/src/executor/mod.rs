@@ -3,7 +3,7 @@ use std::time::Instant;
 use serde::{Deserialize, Serialize};
 use crate::collection::Request;
 use crate::environment::{Environment, EnvironmentManager};
-use crate::error::Result;
+use crate::error::{Result, VeloError};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestResult {
@@ -18,16 +18,17 @@ pub struct Executor {
 }
 
 impl Executor {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         let client = reqwest::Client::builder()
             .use_rustls_tls()
+            .timeout(std::time::Duration::from_secs(30))
             .build()
-            .expect("failed to build reqwest client");
-        Self { client }
+            .map_err(VeloError::Http)?;
+        Ok(Self { client })
     }
 
     pub async fn execute(&self, request: &Request, env: &Environment) -> Result<RequestResult> {
-        let url = EnvironmentManager::resolve(&request.url, env)?;
+        let url = EnvironmentManager::resolve_lenient(&request.url, env);
 
         let method = reqwest::Method::from_bytes(request.method.to_uppercase().as_bytes())
             .unwrap_or(reqwest::Method::GET);
@@ -35,14 +36,21 @@ impl Executor {
         let mut builder = self.client.request(method, &url);
 
         for (key, value) in &request.headers {
-            let resolved_key = EnvironmentManager::resolve(key, env)?;
-            let resolved_value = EnvironmentManager::resolve(value, env)?;
+            let resolved_key = EnvironmentManager::resolve_lenient(key, env);
+            let resolved_value = EnvironmentManager::resolve_lenient(value, env);
             builder = builder.header(resolved_key, resolved_value);
         }
 
         if let Some(body) = &request.body {
             let body_str = serde_json::to_string(body)?;
-            let resolved_body = EnvironmentManager::resolve(&body_str, env)?;
+            let resolved_body = EnvironmentManager::resolve_lenient(&body_str, env);
+            let has_content_type = request
+                .headers
+                .keys()
+                .any(|k| k.to_lowercase() == "content-type");
+            if !has_content_type {
+                builder = builder.header("Content-Type", "application/json");
+            }
             builder = builder.body(resolved_body);
         }
 
@@ -54,9 +62,7 @@ impl Executor {
         let headers = response
             .headers()
             .iter()
-            .filter_map(|(k, v)| {
-                v.to_str().ok().map(|v| (k.to_string(), v.to_string()))
-            })
+            .filter_map(|(k, v)| v.to_str().ok().map(|v| (k.to_string(), v.to_string())))
             .collect();
         let body = response.text().await?;
 
@@ -66,11 +72,5 @@ impl Executor {
             body,
             duration_ms,
         })
-    }
-}
-
-impl Default for Executor {
-    fn default() -> Self {
-        Self::new()
     }
 }

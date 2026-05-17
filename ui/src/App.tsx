@@ -1,57 +1,106 @@
 import { useState, useEffect } from 'react'
 import { invoke } from '@tauri-apps/api/core'
+import {
+  isCommandError,
+  type Collection,
+  type Request,
+  type RequestResult,
+  type Environment,
+  type HeaderRow,
+} from './types'
+import TopBar from './components/TopBar'
+import Sidebar from './components/Sidebar'
+import RequestEditor from './components/RequestEditor'
+import ResponsePane from './components/ResponsePane'
 
-interface Request {
-  id: string
-  name: string
-  method: string
-  url: string
-  headers: Record<string, string>
-  body: unknown | null
-  description: string | null
-}
-
-interface Collection {
-  name: string
-  description: string | null
-  requests: Request[]
-}
-
-interface RequestResult {
-  status: number
-  headers: Record<string, string>
-  body: string
-  duration_ms: number
-}
-
-const METHOD_COLORS: Record<string, string> = {
-  GET: 'bg-green-600',
-  POST: 'bg-blue-600',
-  PUT: 'bg-yellow-600',
-  PATCH: 'bg-purple-600',
-  DELETE: 'bg-red-600',
-}
-
-function methodBadge(method: string) {
-  return METHOD_COLORS[method.toUpperCase()] ?? 'bg-gray-600'
-}
-
-function statusColor(status: number) {
-  if (status >= 200 && status < 300) return 'text-green-400'
-  if (status >= 400) return 'text-red-400'
-  return 'text-gray-400'
-}
-
-function formatBody(raw: string) {
-  try {
-    return JSON.stringify(JSON.parse(raw), null, 2)
-  } catch {
-    return raw
+function EnvModal({
+  envName,
+  rows,
+  onChange,
+  onSave,
+  onClose,
+}: {
+  envName: string
+  rows: HeaderRow[]
+  onChange: (rows: HeaderRow[]) => void
+  onSave: () => void
+  onClose: () => void
+}) {
+  function addRow() {
+    onChange([...rows, { key: '', value: '' }])
   }
+
+  function removeRow(i: number) {
+    onChange(rows.filter((_, idx) => idx !== i))
+  }
+
+  function updateRow(i: number, field: 'key' | 'value', val: string) {
+    onChange(rows.map((row, idx) => (idx === i ? { ...row, [field]: val } : row)))
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+      <div className="bg-[#161b22] border border-gray-700 rounded-lg w-[500px] max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+          <span className="font-semibold text-sm">Edit environment: {envName}</span>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-100">✕</button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {rows.map((row, i) => (
+            <div key={i} className="flex gap-2">
+              <input
+                className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs font-mono text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                placeholder="key"
+                value={row.key}
+                onChange={e => updateRow(i, 'key', e.target.value)}
+              />
+              <input
+                className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs font-mono text-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                placeholder="value"
+                value={row.value}
+                onChange={e => updateRow(i, 'value', e.target.value)}
+              />
+              <button
+                onClick={() => removeRow(i)}
+                className="text-gray-500 hover:text-red-400 px-1 text-sm"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          {rows.length === 0 && (
+            <p className="text-xs text-gray-600 italic">No variables</p>
+          )}
+        </div>
+        <div className="flex justify-between items-center px-4 py-3 border-t border-gray-800">
+          <button
+            onClick={addRow}
+            className="text-xs text-indigo-400 hover:text-indigo-300"
+          >
+            + Add row
+          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="text-xs text-gray-400 hover:text-gray-100 px-3 py-1.5 rounded border border-gray-700"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={onSave}
+              className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function App() {
-  const [basePath, setBasePath] = useState('')
+  const [basePath, setBasePath] = useState(() => localStorage.getItem('velo_base_path') ?? '')
   const [collections, setCollections] = useState<string[]>([])
   const [environments, setEnvironments] = useState<string[]>([])
   const [selectedEnv, setSelectedEnv] = useState('')
@@ -63,24 +112,51 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [responseHeadersExpanded, setResponseHeadersExpanded] = useState(false)
+  const [editableBody, setEditableBody] = useState('')
+  const [editableHeaders, setEditableHeaders] = useState<HeaderRow[]>([])
+  const [showEnvModal, setShowEnvModal] = useState(false)
+  const [envModalRows, setEnvModalRows] = useState<HeaderRow[]>([])
+
+  useEffect(() => {
+    localStorage.setItem('velo_base_path', basePath)
+  }, [basePath])
 
   useEffect(() => {
     if (basePath) loadAll()
-  }, [])
+  }, [basePath]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setEditableBody(
+      selectedRequest?.body != null
+        ? JSON.stringify(selectedRequest.body, null, 2)
+        : ''
+    )
+    setEditableHeaders(
+      selectedRequest
+        ? Object.entries(selectedRequest.headers).map(([key, value]) => ({ key, value }))
+        : []
+    )
+  }, [selectedRequest])
+
+  function formatError(e: unknown): string {
+    if (isCommandError(e)) return `${e.code}: ${e.message}`
+    return String(e)
+  }
 
   async function loadAll() {
     if (!basePath) return
     try {
+      await invoke('set_base_path', { path: basePath })
       const [cols, envs] = await Promise.all([
-        invoke<string[]>('list_collections', { basePath }),
-        invoke<string[]>('list_environments', { basePath }),
+        invoke<string[]>('list_collections'),
+        invoke<string[]>('list_environments'),
       ])
       setCollections(cols)
       setEnvironments(envs)
       setSelectedEnv(prev => (envs.length > 0 && !prev ? envs[0] : prev))
       setError(null)
     } catch (e) {
-      setError(String(e))
+      setError(formatError(e))
     }
   }
 
@@ -92,62 +168,121 @@ export default function App() {
       next.add(name)
       if (!collectionData[name]) {
         try {
-          const col = await invoke<Collection>('get_collection', { basePath, name })
+          const col = await invoke<Collection>('get_collection', { name })
           setCollectionData(prev => ({ ...prev, [name]: col }))
           setError(null)
         } catch (e) {
-          setError(String(e))
+          setError(formatError(e))
         }
       }
     }
     setExpandedCollections(next)
   }
 
+  function handleSelectRequest(col: string, req: Request) {
+    setSelectedCollection(col)
+    setSelectedRequest(req)
+  }
+
   async function sendRequest() {
     if (!selectedRequest || !selectedCollection || !selectedEnv) return
+
+    let overrideBody: unknown = null
+    const trimmedBody = editableBody.trim()
+    if (trimmedBody !== '') {
+      try {
+        overrideBody = JSON.parse(trimmedBody)
+      } catch {
+        setError('Body is not valid JSON')
+        return
+      }
+    }
+
+    const overrideHeaders: Record<string, string> = {}
+    for (const row of editableHeaders) {
+      if (row.key.trim() !== '') {
+        overrideHeaders[row.key.trim()] = row.value
+      }
+    }
+
     setLoading(true)
     setError(null)
     try {
-      const result = await invoke<RequestResult>('execute_request', {
-        basePath,
+      const result = await invoke<RequestResult>('execute_request_with_body', {
         collectionName: selectedCollection,
         requestName: selectedRequest.name,
         envName: selectedEnv,
+        overrideBody,
+        overrideHeaders,
       })
       setResponse(result)
     } catch (e) {
-      setError(String(e))
+      if (isCommandError(e)) {
+        switch (e.code) {
+          case 'COLLECTION_NOT_FOUND':
+            setError('Collection not found')
+            break
+          case 'REQUEST_NOT_FOUND':
+            setError('Request not found')
+            break
+          case 'ENVIRONMENT_NOT_FOUND':
+            setError('Environment not found — check the selected environment')
+            break
+          case 'NETWORK_ERROR':
+            setError(`Network error: ${e.message}`)
+            break
+          default:
+            setError(`Error: ${e.message}`)
+        }
+      } else {
+        setError(String(e))
+      }
     } finally {
       setLoading(false)
     }
   }
 
+  async function handleOpenEnvEdit() {
+    if (!selectedEnv) return
+    try {
+      const env = await invoke<Environment>('get_environment', { name: selectedEnv })
+      setEnvModalRows(
+        Object.entries(env.values).map(([key, value]) => ({ key, value }))
+      )
+      setShowEnvModal(true)
+    } catch (e) {
+      setError(formatError(e))
+    }
+  }
+
+  async function handleSaveEnv() {
+    if (!selectedEnv) return
+    const values: Record<string, string> = Object.fromEntries(
+      envModalRows
+        .filter(r => r.key.trim() !== '')
+        .map(r => [r.key.trim(), r.value])
+    )
+    try {
+      await invoke('save_environment', { name: selectedEnv, values })
+      setShowEnvModal(false)
+    } catch (e) {
+      setError(formatError(e))
+    }
+  }
+
   return (
     <div className="flex flex-col h-screen bg-[#0f1117] text-gray-100 overflow-hidden">
+      <TopBar
+        basePath={basePath}
+        onBasePathChange={setBasePath}
+        onBasePathSubmit={loadAll}
+        environments={environments}
+        selectedEnv={selectedEnv}
+        onEnvChange={setSelectedEnv}
+        onRefresh={loadAll}
+        onEditEnv={handleOpenEnvEdit}
+      />
 
-      {/* Top bar */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-[#161b22] border-b border-gray-800 shrink-0">
-        <span className="text-indigo-400 font-bold text-lg w-20 shrink-0">Velo</span>
-        <input
-          className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder-gray-500"
-          placeholder="Base path (e.g. /home/user/.velo)"
-          value={basePath}
-          onChange={e => setBasePath(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') loadAll() }}
-        />
-        <select
-          className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          value={selectedEnv}
-          onChange={e => setSelectedEnv(e.target.value)}
-        >
-          {environments.length === 0
-            ? <option value="">No environments</option>
-            : environments.map(env => <option key={env} value={env}>{env}</option>)
-          }
-        </select>
-      </div>
-
-      {/* Error banner */}
       {error && (
         <div className="flex items-center justify-between px-4 py-2 bg-red-950 border-b border-red-900 text-red-300 text-sm shrink-0">
           <span>{error}</span>
@@ -160,180 +295,48 @@ export default function App() {
         </div>
       )}
 
-      {/* Body */}
       <div className="flex flex-1 overflow-hidden">
+        <Sidebar
+          basePath={basePath}
+          collections={collections}
+          expandedCollections={expandedCollections}
+          collectionData={collectionData}
+          selectedRequest={selectedRequest}
+          onToggleCollection={toggleCollection}
+          onSelectRequest={handleSelectRequest}
+        />
 
-        {/* Sidebar */}
-        <div className="w-60 shrink-0 flex flex-col bg-[#161b22] border-r border-gray-800 overflow-hidden">
-          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800 shrink-0">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">Collections</span>
-            <button
-              onClick={loadAll}
-              className="text-xs text-gray-400 hover:text-gray-100 px-2 py-1 rounded hover:bg-gray-800"
-            >
-              ↻ Refresh
-            </button>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {!basePath ? (
-              <p className="text-xs text-gray-500 p-4">Set a base path to load collections.</p>
-            ) : collections.length === 0 ? (
-              <p className="text-xs text-gray-500 p-4">No collections found.</p>
-            ) : (
-              collections.map(col => (
-                <div key={col}>
-                  <button
-                    className="w-full text-left flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-gray-800"
-                    onClick={() => toggleCollection(col)}
-                  >
-                    <span className="text-gray-500 text-xs w-3 shrink-0">
-                      {expandedCollections.has(col) ? '▾' : '▸'}
-                    </span>
-                    <span className="truncate">{col}</span>
-                  </button>
-                  {expandedCollections.has(col) && collectionData[col] && (
-                    <div>
-                      {collectionData[col].requests.map(req => (
-                        <button
-                          key={req.id}
-                          onClick={() => { setSelectedCollection(col); setSelectedRequest(req) }}
-                          className={`w-full text-left flex items-center gap-2 pl-7 pr-3 py-1.5 text-xs hover:bg-gray-800 ${
-                            selectedRequest?.id === req.id
-                              ? 'bg-indigo-900/40 text-indigo-400'
-                              : 'text-gray-400'
-                          }`}
-                        >
-                          <span className={`shrink-0 text-[9px] font-bold px-1 py-0.5 rounded text-white ${methodBadge(req.method)}`}>
-                            {req.method.toUpperCase()}
-                          </span>
-                          <span className="truncate">{req.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Editor */}
         <div className="flex-1 flex flex-col overflow-hidden bg-[#0d1117] border-r border-gray-800">
-          {!basePath ? (
-            <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
-              Set a base path above to get started
-            </div>
-          ) : !selectedRequest ? (
-            <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
-              Select a request from the sidebar
-            </div>
-          ) : (
-            <>
-              <div className="flex-1 overflow-y-auto p-5 space-y-5">
-                <div className="flex items-start gap-3">
-                  <span className={`shrink-0 text-xs font-bold px-2 py-1 rounded text-white ${methodBadge(selectedRequest.method)}`}>
-                    {selectedRequest.method.toUpperCase()}
-                  </span>
-                  <span className="text-sm text-gray-200 font-mono break-all leading-6">
-                    {selectedRequest.url}
-                  </span>
-                </div>
-
-                {selectedRequest.description && (
-                  <p className="text-xs text-gray-500">{selectedRequest.description}</p>
-                )}
-
-                {Object.keys(selectedRequest.headers).length > 0 && (
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-500 mb-2">Headers</p>
-                    <div className="rounded border border-gray-800 overflow-hidden">
-                      {Object.entries(selectedRequest.headers).map(([k, v]) => (
-                        <div key={k} className="flex text-xs border-b border-gray-800 last:border-0">
-                          <span className="w-1/3 px-3 py-2 bg-gray-900 text-gray-400 font-mono truncate">{k}</span>
-                          <span className="flex-1 px-3 py-2 text-gray-300 font-mono break-all">{v}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {selectedRequest.body != null && (
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-500 mb-2">Body</p>
-                    <pre className="font-mono text-xs bg-gray-900 border border-gray-800 rounded p-3 text-gray-300 overflow-auto whitespace-pre-wrap break-all">
-                      {JSON.stringify(selectedRequest.body, null, 2)}
-                    </pre>
-                  </div>
-                )}
-              </div>
-
-              <div className="shrink-0 p-4 border-t border-gray-800">
-                <button
-                  onClick={sendRequest}
-                  disabled={loading || !selectedEnv}
-                  className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded py-3 transition-colors"
-                >
-                  {loading && (
-                    <svg className="animate-spin h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                    </svg>
-                  )}
-                  {loading ? 'Sending…' : 'Send'}
-                </button>
-              </div>
-            </>
-          )}
+          <RequestEditor
+            basePath={basePath}
+            selectedCollection={selectedCollection}
+            selectedRequest={selectedRequest}
+            selectedEnv={selectedEnv}
+            editableBody={editableBody}
+            onBodyChange={setEditableBody}
+            editableHeaders={editableHeaders}
+            onHeadersChange={setEditableHeaders}
+            loading={loading}
+            onSend={sendRequest}
+          />
         </div>
 
-        {/* Response panel */}
-        <div className="w-[360px] shrink-0 flex flex-col bg-[#0f1117] overflow-hidden">
-          {!response ? (
-            <div className="flex-1 flex items-center justify-center text-gray-500 text-sm px-6 text-center">
-              Send a request to see the response
-            </div>
-          ) : (
-            <>
-              <div className="shrink-0 flex items-center gap-4 px-4 py-3 border-b border-gray-800">
-                <span className={`text-2xl font-bold ${statusColor(response.status)}`}>
-                  {response.status}
-                </span>
-                <span className="text-xs text-gray-500">{response.duration_ms} ms</span>
-              </div>
-
-              <div className="flex-1 overflow-y-auto flex flex-col">
-                <div className="shrink-0 border-b border-gray-800">
-                  <button
-                    onClick={() => setResponseHeadersExpanded(v => !v)}
-                    className="w-full flex items-center justify-between px-4 py-2 text-[10px] font-semibold uppercase tracking-widest text-gray-500 hover:bg-gray-900"
-                  >
-                    <span>Headers ({Object.keys(response.headers).length})</span>
-                    <span>{responseHeadersExpanded ? '▾' : '▸'}</span>
-                  </button>
-                  {responseHeadersExpanded && (
-                    <div className="border-t border-gray-800">
-                      {Object.entries(response.headers).map(([k, v]) => (
-                        <div key={k} className="flex text-xs border-b border-gray-800 last:border-0">
-                          <span className="w-2/5 px-3 py-1.5 bg-gray-900 text-gray-400 font-mono truncate">{k}</span>
-                          <span className="flex-1 px-3 py-1.5 text-gray-300 font-mono break-all">{v}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex-1 overflow-hidden p-4 flex flex-col gap-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-500 shrink-0">Body</p>
-                  <pre className="flex-1 overflow-auto font-mono text-xs bg-gray-950 border border-gray-800 rounded p-4 text-gray-300 whitespace-pre-wrap break-all">
-                    {formatBody(response.body)}
-                  </pre>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-
+        <ResponsePane
+          response={response}
+          responseHeadersExpanded={responseHeadersExpanded}
+          onToggleHeaders={() => setResponseHeadersExpanded(v => !v)}
+        />
       </div>
+
+      {showEnvModal && selectedEnv && (
+        <EnvModal
+          envName={selectedEnv}
+          rows={envModalRows}
+          onChange={setEnvModalRows}
+          onSave={handleSaveEnv}
+          onClose={() => setShowEnvModal(false)}
+        />
+      )}
     </div>
   )
 }
