@@ -1,13 +1,15 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
-use velo_core::collection::CollectionManager;
+use std::sync::{Arc, Mutex};
+use tokio::sync::RwLock;
+use velo_core::collection::{Collection, CollectionManager};
 use velo_core::environment::EnvironmentManager;
 use velo_core::error::VeloError;
 use velo_core::executor::{Executor, RequestResult};
 
 pub struct AppState {
     pub base_path: Mutex<String>,
+    pub collection_cache: Arc<RwLock<HashMap<String, Collection>>>,
 }
 
 #[derive(serde::Serialize)]
@@ -36,6 +38,7 @@ async fn set_base_path(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
     *state.base_path.lock().unwrap() = path;
+    state.collection_cache.write().await.clear();
     Ok(())
 }
 
@@ -54,12 +57,20 @@ async fn list_collections(
 async fn get_collection(
     name: String,
     state: tauri::State<'_, AppState>,
-) -> Result<velo_core::collection::Collection, CommandError> {
+) -> Result<Collection, CommandError> {
+    {
+        let cache = state.collection_cache.read().await;
+        if let Some(col) = cache.get(&name) {
+            return Ok(col.clone());
+        }
+    }
     let base_path = state.base_path.lock().unwrap().clone();
-    CollectionManager::new(PathBuf::from(base_path))
+    let col = CollectionManager::new(PathBuf::from(base_path))
         .load(&name)
         .await
-        .map_err(into_command_error)
+        .map_err(into_command_error)?;
+    state.collection_cache.write().await.insert(name, col.clone());
+    Ok(col)
 }
 
 #[tauri::command]
@@ -117,7 +128,11 @@ async fn execute_request_with_body(
         .await
         .map_err(into_command_error)?;
     if let Some(body) = override_body {
-        request.body = Some(body);
+        if body.is_null() {
+            request.body = None;
+        } else {
+            request.body = Some(body);
+        }
     }
     for (k, v) in override_headers {
         request.headers.insert(k, v);
@@ -161,6 +176,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .manage(AppState {
             base_path: Mutex::new(String::new()),
+            collection_cache: Arc::new(RwLock::new(HashMap::new())),
         })
         .setup(|app| {
             if cfg!(debug_assertions) {

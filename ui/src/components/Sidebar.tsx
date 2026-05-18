@@ -22,7 +22,7 @@ export default function Sidebar({
   return (
     <div className="w-60 shrink-0 flex flex-col bg-[#161b22] border-r border-gray-800 overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800 shrink-0">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+        <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">
           Collections
         </span>
       </div>
@@ -56,7 +56,7 @@ export default function Sidebar({
                       }`}
                     >
                       <span
-                        className={`shrink-0 text-[9px] font-bold px-1 py-0.5 rounded text-white ${methodBadge(req.method)}`}
+                        className={`shrink-0 text-[11px] font-bold px-1 py-0.5 rounded text-white ${methodBadge(req.method)}`}
                       >
                         {req.method.toUpperCase()}
                       </span>

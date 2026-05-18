@@ -45,6 +45,27 @@ fn default_base_path() -> PathBuf {
     PathBuf::from(home).join(".velo")
 }
 
+fn format_error(e: velo_core::error::VeloError) -> String {
+    use velo_core::error::VeloError::*;
+    match e {
+        CollectionNotFound(name) => format!("collection '{}' not found in collections/", name),
+        RequestNotFound(name) => format!("request '{}' not found in collection", name),
+        EnvironmentNotFound(name) => format!("environment '{}' not found in environments/", name),
+        InvalidTemplate(msg) => format!("template error: {}", msg),
+        Http(e) => {
+            if e.is_timeout() {
+                "request timed out (30s limit)".to_string()
+            } else if e.is_connect() {
+                format!("connection failed: {}", e.url().map(|u| u.as_str()).unwrap_or("unknown URL"))
+            } else {
+                format!("http error: {}", e)
+            }
+        }
+        Io(e) => format!("file error: {}", e),
+        _ => format!("error: {}", e),
+    }
+}
+
 fn status_text(status: u16) -> &'static str {
     match status {
         200 => "OK",
@@ -110,16 +131,16 @@ async fn run(cli: Cli) -> Result<(), String> {
             let req = CollectionManager::new(base.clone())
                 .get_request(&collection, &request)
                 .await
-                .map_err(|e| e.to_string())?;
+                .map_err(format_error)?;
             let environment = EnvironmentManager::new(base)
                 .load(&env)
                 .await
-                .map_err(|e| e.to_string())?;
+                .map_err(format_error)?;
             let result = Executor::new()
-                .map_err(|e| e.to_string())?
+                .map_err(format_error)?
                 .execute(&req, &environment)
                 .await
-                .map_err(|e| e.to_string())?;
+                .map_err(format_error)?;
 
             print_status_line(result.status, result.duration_ms);
             for (k, v) in &result.headers {
@@ -139,7 +160,7 @@ async fn run(cli: Cli) -> Result<(), String> {
                 let names = CollectionManager::new(base.clone())
                     .list()
                     .await
-                    .map_err(|e| e.to_string())?;
+                    .map_err(format_error)?;
                 println!("collections (base: {}):", base.display());
                 for name in names {
                     println!("  • {}", name);
@@ -151,7 +172,7 @@ async fn run(cli: Cli) -> Result<(), String> {
                 let names = EnvironmentManager::new(base.clone())
                     .list()
                     .await
-                    .map_err(|e| e.to_string())?;
+                    .map_err(format_error)?;
                 println!("environments (base: {}):", base.display());
                 for name in names {
                     println!("  • {}", name);

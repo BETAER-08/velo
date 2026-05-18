@@ -41,8 +41,29 @@ export default function RequestEditor({
 
   if (!basePath) {
     return (
-      <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
-        Set a base path above to get started
+      <div className="flex-1 flex flex-col items-center justify-center gap-6 px-8 text-center">
+        <div className="text-4xl">⚡</div>
+        <div>
+          <p className="text-gray-200 font-semibold mb-1">Welcome to Velo</p>
+          <p className="text-xs text-gray-500">
+            Set a base path to load your collections and environments.
+          </p>
+        </div>
+        <div className="w-full max-w-sm bg-gray-900 border border-gray-800 rounded text-left p-4">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-500 mb-2">
+            Expected directory structure
+          </p>
+          <pre className="text-xs font-mono text-gray-400 leading-relaxed">
+{`~/.velo/
+├── collections/
+│   └── api-tests.yaml
+└── environments/
+    └── dev.yaml`}
+          </pre>
+        </div>
+        <p className="text-xs text-gray-600">
+          Click ⚙ above to set your base path.
+        </p>
       </div>
     )
   }
@@ -75,7 +96,7 @@ export default function RequestEditor({
 
         <div>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+            <p className="text-xs font-semibold uppercase tracking-widest text-gray-500">
               Headers
             </p>
             <button
@@ -115,11 +136,21 @@ export default function RequestEditor({
         </div>
 
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-500 mb-2">
-            Body
-          </p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold uppercase tracking-widest text-gray-500">
+              Body
+            </p>
+            {editableBody.trim() !== '' && (
+              <button
+                onClick={() => onBodyChange('')}
+                className="text-xs text-gray-500 hover:text-red-400"
+              >
+                Clear
+              </button>
+            )}
+          </div>
           <textarea
-            className="w-full font-mono text-xs bg-gray-900 border border-gray-800 rounded p-3 text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-y min-h-[120px]"
+            className="w-full font-mono text-xs bg-gray-900 border border-gray-800 rounded p-3 text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-y min-h-[140px]"
             placeholder="JSON body (optional)"
             value={editableBody}
             onChange={e => onBodyChange(e.target.value)}
