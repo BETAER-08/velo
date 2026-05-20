@@ -14,6 +14,9 @@ import RequestEditor from './components/RequestEditor'
 import ResponsePane from './components/ResponsePane'
 import EnvModal from './components/EnvModal'
 import BasePathModal from './components/BasePathModal'
+import Splitter from './components/Splitter'
+import { Icons } from './components/Icon'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 
 function formatError(e: unknown): string {
   if (isCommandError(e)) return `${e.code}: ${e.message}`
@@ -38,9 +41,26 @@ export default function App() {
   const [envModalRows, setEnvModalRows] = useState<HeaderRow[]>([])
   const [showSettingsModal, setShowSettingsModal] = useState(false)
 
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const stored = localStorage.getItem('velo_sidebar_width')
+    return stored ? Math.max(180, Math.min(480, parseInt(stored, 10))) : 240
+  })
+  const [responseWidth, setResponseWidth] = useState(() => {
+    const stored = localStorage.getItem('velo_response_width')
+    return stored ? Math.max(280, Math.min(720, parseInt(stored, 10))) : 420
+  })
+
   useEffect(() => {
     localStorage.setItem('velo_base_path', basePath)
   }, [basePath])
+
+  useEffect(() => {
+    localStorage.setItem('velo_sidebar_width', String(sidebarWidth))
+  }, [sidebarWidth])
+
+  useEffect(() => {
+    localStorage.setItem('velo_response_width', String(responseWidth))
+  }, [responseWidth])
 
   const loadAll = useCallback(async () => {
     if (!basePath) return
@@ -193,8 +213,22 @@ export default function App() {
     setShowSettingsModal(false)
   }
 
+  useKeyboardShortcuts({
+    onSend: () => {
+      if (selectedRequest && selectedCollection && selectedEnv && !loading) {
+        sendRequest()
+      }
+    },
+    onRefresh: loadAll,
+    onOpenSettings: () => setShowSettingsModal(true),
+    onCloseModal: () => {
+      if (showEnvModal) setShowEnvModal(false)
+      else if (showSettingsModal) setShowSettingsModal(false)
+    },
+  })
+
   return (
-    <div className="flex flex-col h-screen bg-[#0f1117] text-gray-100 overflow-hidden">
+    <div className="flex flex-col h-screen bg-[var(--color-bg-base)] text-[var(--color-text-primary)] overflow-hidden">
       <TopBar
         basePath={basePath}
         environments={environments}
@@ -206,29 +240,41 @@ export default function App() {
       />
 
       {error && (
-        <div className="flex items-center justify-between px-4 py-2 bg-red-950 border-b border-red-900 text-red-300 text-sm shrink-0">
-          <span>{error}</span>
+        <div
+          role="alert"
+          className="flex items-start gap-2 px-4 py-2.5 bg-red-950/40 border-b border-[var(--color-danger)]/30 text-red-300 text-xs shrink-0"
+        >
+          <Icons.AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[var(--color-danger)]" />
+          <span className="flex-1">{error}</span>
           <button
             onClick={() => setError(null)}
-            className="ml-4 text-red-400 hover:text-red-200"
+            aria-label="Dismiss error"
+            className="text-red-400 hover:text-red-200 shrink-0"
           >
-            ✕
+            <Icons.X className="w-4 h-4" />
           </button>
         </div>
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar
-          basePath={basePath}
-          collections={collections}
-          expandedCollections={expandedCollections}
-          collectionData={collectionData}
-          selectedRequest={selectedRequest}
-          onToggleCollection={toggleCollection}
-          onSelectRequest={handleSelectRequest}
+        <div style={{ width: sidebarWidth }} className="shrink-0 h-full">
+          <Sidebar
+            basePath={basePath}
+            collections={collections}
+            expandedCollections={expandedCollections}
+            collectionData={collectionData}
+            selectedRequest={selectedRequest}
+            onToggleCollection={toggleCollection}
+            onSelectRequest={handleSelectRequest}
+          />
+        </div>
+
+        <Splitter
+          ariaLabel="Resize sidebar"
+          onResize={delta => setSidebarWidth(w => Math.max(180, Math.min(480, w + delta)))}
         />
 
-        <div className="flex-1 flex flex-col overflow-hidden bg-[#0d1117] border-r border-gray-800">
+        <div className="flex-1 min-w-[320px] flex flex-col overflow-hidden bg-[var(--color-bg-base)]">
           <RequestEditor
             basePath={basePath}
             selectedCollection={selectedCollection}
@@ -243,7 +289,14 @@ export default function App() {
           />
         </div>
 
-        <ResponsePane response={response} />
+        <Splitter
+          ariaLabel="Resize response pane"
+          onResize={delta => setResponseWidth(w => Math.max(280, Math.min(720, w - delta)))}
+        />
+
+        <div style={{ width: responseWidth }} className="shrink-0 h-full">
+          <ResponsePane response={response} loading={loading} />
+        </div>
       </div>
 
       {showEnvModal && selectedEnv && (

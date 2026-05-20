@@ -37,7 +37,19 @@ async fn set_base_path(
     path: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
-    *state.base_path.lock().unwrap() = path;
+    let expanded = if path.starts_with("~/") || path == "~" {
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_default();
+        if home.is_empty() {
+            path
+        } else {
+            path.replacen('~', &home, 1)
+        }
+    } else {
+        path
+    };
+    *state.base_path.lock().unwrap() = expanded;
     state.collection_cache.write().await.clear();
     Ok(())
 }

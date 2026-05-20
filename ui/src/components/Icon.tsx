@@ -1,0 +1,41 @@
+import {
+  Zap,
+  Settings,
+  RefreshCw,
+  Pencil,
+  X,
+  ChevronRight,
+  ChevronDown,
+  Plus,
+  Trash2,
+  Send,
+  Loader2,
+  FolderOpen,
+  FileText,
+  AlertCircle,
+  Check,
+  Search,
+  Copy,
+} from 'lucide-react'
+
+export const Icons = {
+  Zap,
+  Settings,
+  RefreshCw,
+  Pencil,
+  X,
+  ChevronRight,
+  ChevronDown,
+  Plus,
+  Trash2,
+  Send,
+  Loader2,
+  FolderOpen,
+  FileText,
+  AlertCircle,
+  Check,
+  Search,
+  Copy,
+} as const
+
+export type IconName = keyof typeof Icons
