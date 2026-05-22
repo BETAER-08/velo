@@ -61,7 +61,7 @@ jobs:
         run: npm install
 
       - name: Install frontend dependencies
-        run: cd ui && pnpm install
+        run: cd ui && pnpm install --no-frozen-lockfile
 
       - name: Build frontend
         run: cd ui && pnpm build
