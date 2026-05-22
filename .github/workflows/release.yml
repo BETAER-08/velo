@@ -53,6 +53,9 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
+      - name: Install root dependencies
+        run: pnpm install
+
       - name: Install frontend dependencies
         run: cd ui && pnpm install
 
@@ -66,7 +69,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Velo ${{ github.ref_name }}
-          releaseBody: "macOS Apple Silicon: Velo_aarch64.dmg | macOS Intel: Velo_x64.dmg | Windows: Velo_x64-setup.exe | Linux deb: Velo_amd64.deb | Linux rpm: Velo_amd64.rpm | Linux AppImage (all distros): Velo_amd64.AppImage"
+          releaseBody: "macOS Apple Silicon Velo_aarch64.dmg, macOS Intel Velo_x64.dmg, Windows Velo_x64-setup.exe, Linux deb Velo_amd64.deb, Linux rpm Velo_amd64.rpm (Fedora/RHEL/openSUSE), Linux AppImage Velo_amd64.AppImage (all distros)"
           releaseDraft: true
           prerelease: true
           projectPath: '.'
