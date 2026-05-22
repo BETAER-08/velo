@@ -116,6 +116,7 @@ jobs:
         run: |
           dnf install -y \
             git tar gzip curl \
+            gcc gcc-c++ \
             webkit2gtk4.1-devel \
             openssl-devel \
             libappindicator-gtk3-devel \
