@@ -5,3 +5,5 @@
 *.env.local
 .velo/environments/prod.yaml
 .idea/
+node_modules/
+package-lock.json
