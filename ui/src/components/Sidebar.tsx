@@ -8,7 +8,7 @@ interface Props {
   expandedCollections: Set<string>
   collectionData: Record<string, Collection>
   selectedRequest: Request | null
-  onToggleCollection: (name: string) => void
+  onToggleCollection: (name: string) => Promise<void> | void
   onSelectRequest: (col: string, req: Request) => void
 }
 

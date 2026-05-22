@@ -129,11 +129,17 @@ export default function RequestEditor({
         )}
       </div>
 
-      <div className="shrink-0 flex border-b border-[var(--color-border-subtle)] px-5">
+      <div
+        className="shrink-0 flex border-b border-[var(--color-border-subtle)] px-5"
+        role="tablist"
+        aria-label="Request sections"
+      >
         <button
           onClick={() => setActiveSection('headers')}
           role="tab"
+          id="tab-headers"
           aria-selected={activeSection === 'headers'}
+          aria-controls="panel-headers"
           className={`px-3 py-2 text-xs font-medium transition-colors ${
             activeSection === 'headers'
               ? 'text-[var(--color-accent-hover)] border-b-2 border-[var(--color-accent)] -mb-px'
@@ -145,7 +151,9 @@ export default function RequestEditor({
         <button
           onClick={() => setActiveSection('body')}
           role="tab"
+          id="tab-body"
           aria-selected={activeSection === 'body'}
+          aria-controls="panel-body"
           className={`px-3 py-2 text-xs font-medium transition-colors flex items-center gap-1.5 ${
             activeSection === 'body'
               ? 'text-[var(--color-accent-hover)] border-b-2 border-[var(--color-accent)] -mb-px'
@@ -161,7 +169,7 @@ export default function RequestEditor({
 
       <div className="flex-1 overflow-y-auto p-5">
         {activeSection === 'headers' && (
-          <div>
+          <div role="tabpanel" id="panel-headers" aria-labelledby="tab-headers">
             <div className="flex items-center justify-between mb-3">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--color-text-muted)]">
                 Request Headers
@@ -209,7 +217,7 @@ export default function RequestEditor({
         )}
 
         {activeSection === 'body' && (
-          <div>
+          <div role="tabpanel" id="panel-body" aria-labelledby="tab-body">
             <div className="flex items-center justify-between mb-3">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--color-text-muted)]">
                 Request Body · JSON

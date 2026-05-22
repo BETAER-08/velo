@@ -58,9 +58,9 @@ export function methodBadge(method: string): string {
 }
 
 export function statusColor(status: number): string {
-  if (status >= 200 && status < 300) return 'text-green-400'
-  if (status >= 400) return 'text-red-400'
-  return 'text-gray-400'
+  if (status >= 200 && status < 300) return 'text-[var(--color-success)]'
+  if (status >= 400) return 'text-[var(--color-danger)]'
+  return 'text-[var(--color-text-secondary)]'
 }
 
 export function formatBody(raw: string): string {

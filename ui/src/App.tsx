@@ -271,6 +271,9 @@ export default function App() {
 
         <Splitter
           ariaLabel="Resize sidebar"
+          currentValue={sidebarWidth}
+          minValue={180}
+          maxValue={480}
           onResize={delta => setSidebarWidth(w => Math.max(180, Math.min(480, w + delta)))}
         />
 
@@ -291,6 +294,9 @@ export default function App() {
 
         <Splitter
           ariaLabel="Resize response pane"
+          currentValue={responseWidth}
+          minValue={280}
+          maxValue={720}
           onResize={delta => setResponseWidth(w => Math.max(280, Math.min(720, w - delta)))}
         />
 

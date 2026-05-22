@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 interface Shortcuts {
   onSend?: () => void
@@ -8,23 +8,28 @@ interface Shortcuts {
 }
 
 export function useKeyboardShortcuts(s: Shortcuts) {
+  const ref = useRef(s)
+  useEffect(() => {
+    ref.current = s
+  })
   useEffect(() => {
     function handler(e: KeyboardEvent) {
+      const cur = ref.current
       const mod = e.metaKey || e.ctrlKey
-      if (mod && e.key === 'Enter' && s.onSend) {
+      if (mod && e.key === 'Enter' && cur.onSend) {
         e.preventDefault()
-        s.onSend()
-      } else if (mod && e.key === 'r' && s.onRefresh) {
+        cur.onSend()
+      } else if (mod && e.key === 'r' && cur.onRefresh) {
         e.preventDefault()
-        s.onRefresh()
-      } else if (mod && e.key === ',' && s.onOpenSettings) {
+        cur.onRefresh()
+      } else if (mod && e.key === ',' && cur.onOpenSettings) {
         e.preventDefault()
-        s.onOpenSettings()
-      } else if (e.key === 'Escape' && s.onCloseModal) {
-        s.onCloseModal()
+        cur.onOpenSettings()
+      } else if (e.key === 'Escape' && cur.onCloseModal) {
+        cur.onCloseModal()
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [s])
+  }, [])
 }
