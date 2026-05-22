@@ -36,10 +36,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v4
         with:
           version: latest
 
@@ -73,4 +73,6 @@ jobs:
             - Linux: `Velo_amd64.AppImage` / `Velo_amd64.deb`
           releaseDraft: true
           prerelease: true
+          projectPath: '.'
+          tauriScript: 'pnpm tauri'
           args: ${{ matrix.args }}
