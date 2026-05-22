@@ -70,7 +70,9 @@ export default function Splitter({
       tabIndex={0}
       onMouseDown={onMouseDown}
       onKeyDown={onKeyDown}
-      className="w-1 shrink-0 bg-[var(--color-border-subtle)] hover:bg-[var(--color-accent)] active:bg-[var(--color-accent)] cursor-col-resize transition-colors focus:bg-[var(--color-accent)]"
-    />
+      className="w-3 shrink-0 relative cursor-col-resize group focus:outline-none"
+    >
+      <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px bg-[var(--color-border-subtle)] group-hover:bg-[var(--color-accent)] group-focus:bg-[var(--color-accent)] group-active:bg-[var(--color-accent)] transition-colors pointer-events-none" />
+    </div>
   )
 }

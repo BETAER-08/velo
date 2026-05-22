@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { methodBadge, type Collection, type Request } from '../types'
+import { methodColor, type Collection, type Request } from '../types'
 import { Icons } from './Icon'
+import EmptyState from './EmptyState'
 
 interface Props {
   basePath: string
@@ -65,10 +66,11 @@ export default function Sidebar({
       </div>
       <div className="flex-1 overflow-y-auto py-1">
         {!basePath ? (
-          <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center">
-            <Icons.FolderOpen className="w-6 h-6 text-[var(--color-text-muted)]" />
-            <p className="text-xs text-[var(--color-text-muted)]">Set a base path to load collections.</p>
-          </div>
+          <EmptyState
+            icon={<Icons.FolderOpen className="w-6 h-6" />}
+            title="No base path set"
+            description="Set a base path to load collections."
+          />
         ) : filtered.length === 0 ? (
           <p className="text-xs text-[var(--color-text-muted)] p-4 text-center">
             {collections.length === 0 ? 'No collections found.' : 'No matches.'}
@@ -116,7 +118,8 @@ export default function Sidebar({
                           }`}
                         >
                           <span
-                            className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded text-white ${methodBadge(req.method)}`}
+                            className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded text-white"
+                            style={{ backgroundColor: methodColor(req.method) }}
                           >
                             {req.method.toUpperCase()}
                           </span>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { methodBadge, type Request, type HeaderRow } from '../types'
+import { methodColor, type Request, type HeaderRow } from '../types'
 import { Icons } from './Icon'
+import EmptyState from './EmptyState'
 
 interface Props {
   basePath: string
@@ -13,6 +14,7 @@ interface Props {
   onHeadersChange: (headers: HeaderRow[]) => void
   loading: boolean
   onSend: () => void
+  onCancel: () => void
 }
 
 function isValidJSON(text: string): boolean {
@@ -36,6 +38,7 @@ export default function RequestEditor({
   onHeadersChange,
   loading,
   onSend,
+  onCancel,
 }: Props) {
   const [activeSection, setActiveSection] = useState<'headers' | 'body'>('body')
 
@@ -93,13 +96,11 @@ export default function RequestEditor({
 
   if (!selectedRequest || !selectedCollection) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-6">
-        <Icons.FileText className="w-8 h-8 text-[var(--color-text-muted)]" />
-        <p className="text-sm text-[var(--color-text-secondary)]">No request selected</p>
-        <p className="text-xs text-[var(--color-text-muted)]">
-          Select a request from the sidebar to start.
-        </p>
-      </div>
+      <EmptyState
+        icon={<Icons.FileText className="w-8 h-8" />}
+        title="No request selected"
+        description="Select a request from the sidebar to start."
+      />
     )
   }
 
@@ -111,7 +112,8 @@ export default function RequestEditor({
       <div className="shrink-0 px-5 py-3 border-b border-[var(--color-border-subtle)] bg-[var(--color-bg-base)]">
         <div className="flex items-center gap-3">
           <span
-            className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded text-white ${methodBadge(selectedRequest.method)}`}
+            className="shrink-0 text-xs font-bold px-2.5 py-1 rounded text-white"
+            style={{ backgroundColor: methodColor(selectedRequest.method) }}
           >
             {selectedRequest.method.toUpperCase()}
           </span>
@@ -266,25 +268,30 @@ export default function RequestEditor({
       </div>
 
       <div className="shrink-0 p-4 border-t border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]">
-        <button
-          onClick={onSend}
-          disabled={loading || !selectedEnv || (editableBody.trim() !== '' && !bodyValid)}
-          aria-label="Send request"
-          title="Send (Ctrl+Enter)"
-          className="w-full flex items-center justify-center gap-2 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-md py-2.5 transition-colors text-sm"
-        >
-          {loading ? (
-            <Icons.Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
+        {loading ? (
+          <button
+            onClick={onCancel}
+            aria-label="Cancel request"
+            className="w-full flex items-center justify-center gap-2 bg-[var(--color-bg-elevated)] hover:bg-[var(--color-danger)]/20 border border-[var(--color-border-default)] hover:border-[var(--color-danger)]/50 text-[var(--color-text-secondary)] hover:text-[var(--color-danger)] font-semibold rounded-md py-2.5 transition-colors text-sm"
+          >
+            <Icons.X className="w-4 h-4" />
+            Cancel
+          </button>
+        ) : (
+          <button
+            onClick={onSend}
+            disabled={!selectedEnv || (editableBody.trim() !== '' && !bodyValid)}
+            aria-label="Send request"
+            title="Send (Ctrl+Enter)"
+            className="w-full flex items-center justify-center gap-2 bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-md py-2.5 transition-colors text-sm"
+          >
             <Icons.Send className="w-4 h-4" />
-          )}
-          {loading ? 'Sending…' : 'Send'}
-          {!loading && (
+            Send
             <kbd className="ml-1 text-[10px] font-mono opacity-70 border border-white/30 rounded px-1 py-0.5">
               ⌘⏎
             </kbd>
-          )}
-        </button>
+          </button>
+        )}
       </div>
     </>
   )

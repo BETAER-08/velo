@@ -41,8 +41,7 @@ enum ListTarget {
 }
 
 fn default_base_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/tmp"));
-    PathBuf::from(home).join(".velo")
+    PathBuf::from(velo_core::expand_home("~/.velo"))
 }
 
 fn format_error(e: velo_core::error::VeloError) -> String {
@@ -103,7 +102,7 @@ fn print_status_line(status: u16, duration_ms: u64) {
         println!("{}", line.red());
     } else if status >= 400 {
         println!("{}", line.yellow());
-    } else if status >= 200 && status < 300 {
+    } else if (200..300).contains(&status) {
         println!("{}", line.green());
     } else {
         println!("{}", line);

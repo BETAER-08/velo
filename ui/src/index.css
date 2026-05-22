@@ -18,6 +18,12 @@
   --color-warning: #f59e0b;
   --color-danger: #ef4444;
   --color-info: #3b82f6;
+  --method-get:    #16a34a;
+  --method-post:   #2563eb;
+  --method-put:    #ca8a04;
+  --method-patch:  #9333ea;
+  --method-delete: #dc2626;
+  --method-other:  #4b5563;
 }
 
 *, *::before, *::after {
@@ -75,3 +81,9 @@ textarea:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
+
+.hljs-attr     { color: var(--color-accent-hover); }
+.hljs-string   { color: var(--color-success); }
+.hljs-number   { color: var(--color-warning); }
+.hljs-literal  { color: var(--color-danger); }
+.hljs-punctuation { color: var(--color-text-secondary); }

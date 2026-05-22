@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import {
   isCommandError,
@@ -40,6 +40,24 @@ export default function App() {
   const [showEnvModal, setShowEnvModal] = useState(false)
   const [envModalRows, setEnvModalRows] = useState<HeaderRow[]>([])
   const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  const isCancelledRef = useRef(false)
+
+  const [prevSelectedRequest, setPrevSelectedRequest] = useState<Request | null>(selectedRequest)
+  if (prevSelectedRequest !== selectedRequest) {
+    setPrevSelectedRequest(selectedRequest)
+    setEditableBody(
+      selectedRequest?.body != null
+        ? JSON.stringify(selectedRequest.body, null, 2)
+        : ''
+    )
+    setEditableHeaders(
+      selectedRequest
+        ? Object.entries(selectedRequest.headers).map(([key, value]) => ({ key, value }))
+        : []
+    )
+  }
 
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const stored = localStorage.getItem('velo_sidebar_width')
@@ -62,39 +80,31 @@ export default function App() {
     localStorage.setItem('velo_response_width', String(responseWidth))
   }, [responseWidth])
 
-  const loadAll = useCallback(async () => {
+  useEffect(() => {
     if (!basePath) return
-    try {
-      await invoke('set_base_path', { path: basePath })
-      const [cols, envs] = await Promise.all([
+    let active = true
+    invoke('set_base_path', { path: basePath })
+      .then(() => Promise.all([
         invoke<string[]>('list_collections'),
         invoke<string[]>('list_environments'),
-      ])
-      setCollections(cols)
-      setEnvironments(envs)
-      setSelectedEnv(prev => (envs.length > 0 && !prev ? envs[0] : prev))
-      setError(null)
-    } catch (e) {
-      setError(formatError(e))
-    }
-  }, [basePath])
+      ]))
+      .then(([cols, envs]) => {
+        if (!active) return
+        setCollections(cols)
+        setEnvironments(envs)
+        setSelectedEnv(prev => (envs.length > 0 && !prev ? envs[0] : prev))
+        setError(null)
+      })
+      .catch(e => {
+        if (!active) return
+        setError(formatError(e))
+      })
+    return () => { active = false }
+  }, [basePath, reloadKey])
 
-  useEffect(() => {
-    if (basePath) loadAll()
-  }, [basePath, loadAll])
-
-  useEffect(() => {
-    setEditableBody(
-      selectedRequest?.body != null
-        ? JSON.stringify(selectedRequest.body, null, 2)
-        : ''
-    )
-    setEditableHeaders(
-      selectedRequest
-        ? Object.entries(selectedRequest.headers).map(([key, value]) => ({ key, value }))
-        : []
-    )
-  }, [selectedRequest])
+  const loadAll = useCallback(() => {
+    setReloadKey(k => k + 1)
+  }, [])
 
   async function toggleCollection(name: string) {
     const next = new Set(expandedCollections)
@@ -118,6 +128,10 @@ export default function App() {
   function handleSelectRequest(col: string, req: Request) {
     setSelectedCollection(col)
     setSelectedRequest(req)
+  }
+
+  function cancelRequest() {
+    isCancelledRef.current = true
   }
 
   async function sendRequest() {
@@ -149,12 +163,15 @@ export default function App() {
     }
     invokeParams.overrideHeaders = overrideHeaders
 
+    isCancelledRef.current = false
     setLoading(true)
     setError(null)
     try {
       const result = await invoke<RequestResult>('execute_request_with_body', invokeParams)
+      if (isCancelledRef.current) return
       setResponse(result)
     } catch (e) {
+      if (isCancelledRef.current) { setError(null); return }
       if (isCommandError(e)) {
         switch (e.code) {
           case 'COLLECTION_NOT_FOUND':
@@ -242,14 +259,14 @@ export default function App() {
       {error && (
         <div
           role="alert"
-          className="flex items-start gap-2 px-4 py-2.5 bg-red-950/40 border-b border-[var(--color-danger)]/30 text-red-300 text-xs shrink-0"
+          className="flex items-start gap-2 px-4 py-2.5 bg-[var(--color-danger)]/10 border-b border-[var(--color-danger)]/30 text-[var(--color-text-primary)] text-xs shrink-0"
         >
           <Icons.AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[var(--color-danger)]" />
           <span className="flex-1">{error}</span>
           <button
             onClick={() => setError(null)}
             aria-label="Dismiss error"
-            className="text-red-400 hover:text-red-200 shrink-0"
+            className="text-[var(--color-danger)] hover:text-red-200 shrink-0"
           >
             <Icons.X className="w-4 h-4" />
           </button>
@@ -289,6 +306,7 @@ export default function App() {
             onHeadersChange={setEditableHeaders}
             loading={loading}
             onSend={sendRequest}
+            onCancel={cancelRequest}
           />
         </div>
 

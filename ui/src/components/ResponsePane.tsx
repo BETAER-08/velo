@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
-import { statusColor, formatBody, type RequestResult } from '../types'
+import { useState } from 'react'
+import { statusColor, formatBody, formatBytes, type RequestResult } from '../types'
 import { Icons } from './Icon'
+import hljs from 'highlight.js/lib/core'
+import json from 'highlight.js/lib/languages/json'
+import EmptyState from './EmptyState'
 
-interface Props {
-  response: RequestResult | null
-  loading: boolean
-}
+hljs.registerLanguage('json', json)
 
 const STATUS_TEXT: Record<number, string> = {
   200: 'OK',
@@ -33,14 +33,30 @@ function statusText(s: number): string {
   return STATUS_TEXT[s] ?? ''
 }
 
+function JsonHighlight({ code }: { code: string }) {
+  const highlighted = hljs.highlight(code, { language: 'json' }).value
+  return (
+    <pre className="flex-1 overflow-auto font-mono text-xs bg-[var(--color-bg-base)] p-4 m-0 whitespace-pre-wrap break-all">
+      <code dangerouslySetInnerHTML={{ __html: highlighted }} />
+    </pre>
+  )
+}
+
+interface Props {
+  response: RequestResult | null
+  loading: boolean
+}
+
 export default function ResponsePane({ response, loading }: Props) {
+  const [prevResponse, setPrevResponse] = useState<RequestResult | null>(null)
   const [activeTab, setActiveTab] = useState<'body' | 'headers' | 'raw'>('body')
   const [copied, setCopied] = useState(false)
 
-  useEffect(() => {
+  if (prevResponse !== response) {
+    setPrevResponse(response)
     setActiveTab('body')
     setCopied(false)
-  }, [response])
+  }
 
   async function copyContent() {
     if (!response) return
@@ -73,12 +89,12 @@ export default function ResponsePane({ response, loading }: Props) {
 
   if (!response) {
     return (
-      <div className="h-full w-full flex flex-col items-center justify-center gap-3 px-6 text-center bg-[var(--color-bg-base)]">
-        <Icons.Send className="w-8 h-8 text-[var(--color-text-muted)]" />
-        <p className="text-sm text-[var(--color-text-secondary)]">No response yet</p>
-        <p className="text-xs text-[var(--color-text-muted)]">
-          Send a request to see results here.
-        </p>
+      <div className="h-full w-full flex flex-col bg-[var(--color-bg-base)]">
+        <EmptyState
+          icon={<Icons.Send className="w-8 h-8" />}
+          title="No response yet"
+          description="Send a request to see results here."
+        />
       </div>
     )
   }
@@ -97,9 +113,15 @@ export default function ResponsePane({ response, loading }: Props) {
             <span className="text-xs text-[var(--color-text-secondary)] truncate">{text}</span>
           )}
         </div>
-        <span className="text-xs text-[var(--color-text-muted)] tabular-nums shrink-0">
-          {response.duration_ms} ms
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs text-[var(--color-text-muted)] tabular-nums">
+            {response.duration_ms} ms
+          </span>
+          <span className="text-[var(--color-text-muted)]" aria-hidden="true">·</span>
+          <span className="text-xs text-[var(--color-text-muted)] tabular-nums">
+            {formatBytes(new TextEncoder().encode(response.body).length)}
+          </span>
+        </div>
       </div>
 
       <div
@@ -135,11 +157,17 @@ export default function ResponsePane({ response, loading }: Props) {
       </div>
 
       <div className="flex-1 overflow-hidden flex flex-col" id={`response-panel-${activeTab}`} role="tabpanel">
-        {activeTab === 'body' && (
-          <pre className="flex-1 overflow-auto font-mono text-xs bg-[var(--color-bg-base)] p-4 text-[var(--color-text-primary)] whitespace-pre-wrap break-all m-0">
-            {formatBody(response.body)}
-          </pre>
-        )}
+        {activeTab === 'body' && (() => {
+          const formatted = formatBody(response.body)
+          const isJson = formatted.startsWith('{') || formatted.startsWith('[')
+          return isJson ? (
+            <JsonHighlight code={formatted} />
+          ) : (
+            <pre className="flex-1 overflow-auto font-mono text-xs bg-[var(--color-bg-base)] p-4 text-[var(--color-text-primary)] whitespace-pre-wrap break-all m-0">
+              {formatted}
+            </pre>
+          )
+        })()}
         {activeTab === 'headers' && (
           <div className="flex-1 overflow-auto">
             {Object.entries(response.headers).map(([k, v]) => (

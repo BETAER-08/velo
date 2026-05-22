@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use velo_core::collection::{Collection, CollectionManager};
 use velo_core::environment::EnvironmentManager;
@@ -8,8 +8,9 @@ use velo_core::error::VeloError;
 use velo_core::executor::{Executor, RequestResult};
 
 pub struct AppState {
-    pub base_path: Mutex<String>,
+    pub base_path: RwLock<String>,
     pub collection_cache: Arc<RwLock<HashMap<String, Collection>>>,
+    pub executor: Executor,
 }
 
 #[derive(serde::Serialize)]
@@ -37,19 +38,8 @@ async fn set_base_path(
     path: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
-    let expanded = if path.starts_with("~/") || path == "~" {
-        let home = std::env::var("HOME")
-            .or_else(|_| std::env::var("USERPROFILE"))
-            .unwrap_or_default();
-        if home.is_empty() {
-            path
-        } else {
-            path.replacen('~', &home, 1)
-        }
-    } else {
-        path
-    };
-    *state.base_path.lock().unwrap() = expanded;
+    let expanded = velo_core::expand_home(&path);
+    *state.base_path.write().await = expanded;
     state.collection_cache.write().await.clear();
     Ok(())
 }
@@ -58,7 +48,7 @@ async fn set_base_path(
 async fn list_collections(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<String>, CommandError> {
-    let base_path = state.base_path.lock().unwrap().clone();
+    let base_path = state.base_path.read().await.clone();
     CollectionManager::new(PathBuf::from(base_path))
         .list()
         .await
@@ -76,7 +66,7 @@ async fn get_collection(
             return Ok(col.clone());
         }
     }
-    let base_path = state.base_path.lock().unwrap().clone();
+    let base_path = state.base_path.read().await.clone();
     let col = CollectionManager::new(PathBuf::from(base_path))
         .load(&name)
         .await
@@ -86,34 +76,10 @@ async fn get_collection(
 }
 
 #[tauri::command]
-async fn execute_request(
-    collection_name: String,
-    request_name: String,
-    env_name: String,
-    state: tauri::State<'_, AppState>,
-) -> Result<RequestResult, CommandError> {
-    let base_path = state.base_path.lock().unwrap().clone();
-    let base = PathBuf::from(base_path);
-    let request = CollectionManager::new(base.clone())
-        .get_request(&collection_name, &request_name)
-        .await
-        .map_err(into_command_error)?;
-    let env = EnvironmentManager::new(base)
-        .load(&env_name)
-        .await
-        .map_err(into_command_error)?;
-    Executor::new()
-        .map_err(into_command_error)?
-        .execute(&request, &env)
-        .await
-        .map_err(into_command_error)
-}
-
-#[tauri::command]
 async fn list_environments(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<String>, CommandError> {
-    let base_path = state.base_path.lock().unwrap().clone();
+    let base_path = state.base_path.read().await.clone();
     EnvironmentManager::new(PathBuf::from(base_path))
         .list()
         .await
@@ -129,7 +95,7 @@ async fn execute_request_with_body(
     override_headers: HashMap<String, String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<RequestResult, CommandError> {
-    let base_path = state.base_path.lock().unwrap().clone();
+    let base_path = state.base_path.read().await.clone();
     let base = PathBuf::from(base_path);
     let mut request = CollectionManager::new(base.clone())
         .get_request(&collection_name, &request_name)
@@ -149,8 +115,7 @@ async fn execute_request_with_body(
     for (k, v) in override_headers {
         request.headers.insert(k, v);
     }
-    Executor::new()
-        .map_err(into_command_error)?
+    state.executor
         .execute(&request, &env)
         .await
         .map_err(into_command_error)
@@ -162,7 +127,7 @@ async fn save_environment(
     values: HashMap<String, String>,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
-    let base_path = state.base_path.lock().unwrap().clone();
+    let base_path = state.base_path.read().await.clone();
     let env = velo_core::environment::Environment { name, values };
     EnvironmentManager::new(PathBuf::from(base_path))
         .save(&env)
@@ -175,7 +140,7 @@ async fn get_environment(
     name: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<velo_core::environment::Environment, CommandError> {
-    let base_path = state.base_path.lock().unwrap().clone();
+    let base_path = state.base_path.read().await.clone();
     EnvironmentManager::new(PathBuf::from(base_path))
         .load(&name)
         .await
@@ -187,8 +152,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .manage(AppState {
-            base_path: Mutex::new(String::new()),
+            base_path: RwLock::new(String::new()),
             collection_cache: Arc::new(RwLock::new(HashMap::new())),
+            executor: Executor::new().expect("failed to build HTTP client"),
         })
         .setup(|app| {
             if cfg!(debug_assertions) {
@@ -204,7 +170,6 @@ pub fn run() {
             set_base_path,
             list_collections,
             get_collection,
-            execute_request,
             list_environments,
             execute_request_with_body,
             save_environment,

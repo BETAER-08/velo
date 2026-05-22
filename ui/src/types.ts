@@ -45,16 +45,22 @@ export function isCommandError(e: unknown): e is CommandError {
   )
 }
 
-export const METHOD_COLORS: Record<string, string> = {
-  GET: 'bg-green-600',
-  POST: 'bg-blue-600',
-  PUT: 'bg-yellow-600',
-  PATCH: 'bg-purple-600',
-  DELETE: 'bg-red-600',
+export const METHOD_BG: Record<string, string> = {
+  GET:    'var(--method-get)',
+  POST:   'var(--method-post)',
+  PUT:    'var(--method-put)',
+  PATCH:  'var(--method-patch)',
+  DELETE: 'var(--method-delete)',
 }
 
-export function methodBadge(method: string): string {
-  return METHOD_COLORS[method.toUpperCase()] ?? 'bg-gray-600'
+export function methodColor(method: string): string {
+  return METHOD_BG[method.toUpperCase()] ?? 'var(--method-other)'
+}
+
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1048576).toFixed(2)} MB`
 }
 
 export function statusColor(status: number): string {
