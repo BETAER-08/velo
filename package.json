@@ -1,0 +1,10 @@
+{
+  "name": "velo",
+  "private": true,
+  "scripts": {
+    "tauri": "cd ui && pnpm tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

@@ -31,7 +31,13 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -64,15 +70,92 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'Velo ${{ github.ref_name }}'
           releaseBody: |
-            Velo ${{ github.ref_name }} beta release.
+            ## Velo ${{ github.ref_name }}
 
-            **Downloads**
-            - macOS Apple Silicon: `Velo_aarch64.dmg`
-            - macOS Intel: `Velo_x64.dmg`
-            - Windows: `Velo_x64-setup.exe`
-            - Linux: `Velo_amd64.AppImage` / `Velo_amd64.deb`
+            ### Downloads
+
+            | Platform | File |
+            |---|---|
+            | macOS Apple Silicon | `Velo_aarch64.dmg` |
+            | macOS Intel | `Velo_x64.dmg` |
+            | Windows | `Velo_x64-setup.exe` |
+            | Linux (Ubuntu/Debian) | `Velo_amd64.deb` |
+            | Linux (Fedora/RHEL) | `Velo_amd64.rpm` |
+            | Linux (All distros) | `Velo_amd64.AppImage` |
+
+            ### Linux installation
+
+            **Ubuntu/Debian**
+            ```bash
+            sudo dpkg -i Velo_amd64.deb
+            ```
+
+            **Fedora/RHEL/openSUSE**
+            ```bash
+            sudo rpm -i Velo_amd64.rpm
+            ```
+
+            **Any distro (AppImage)**
+            ```bash
+            chmod +x Velo_amd64.AppImage
+            ./Velo_amd64.AppImage
+            ```
           releaseDraft: true
           prerelease: true
-          projectPath: '.'
-          tauriScript: 'pnpm tauri'
+          frontendProjectPath: 'ui'
           args: ${{ matrix.args }}
+
+  linux-appimage:
+    permissions:
+      contents: write
+    runs-on: ubuntu-22.04
+    needs: release
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            squashfs-tools
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: cd ui && pnpm install
+
+      - name: Build AppImage only
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Velo ${{ github.ref_name }}'
+          releaseBody: ''
+          releaseDraft: true
+          prerelease: true
+          frontendProjectPath: 'ui'
+          args: '--bundles appimage'
