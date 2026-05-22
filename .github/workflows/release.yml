@@ -31,12 +31,7 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libgtk-3-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libgtk-3-dev
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -70,26 +65,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'Velo ${{ github.ref_name }}'
-          releaseBody: |
-            ## Velo ${{ github.ref_name }}
-
-            | Platform | File |
-            |---|---|
-            | macOS Apple Silicon | `Velo_aarch64.dmg` |
-            | macOS Intel | `Velo_x64.dmg` |
-            | Windows | `Velo_x64-setup.exe` |
-            | Linux (Ubuntu/Debian) | `Velo_amd64.deb` |
-            | Linux (Fedora/RHEL/openSUSE) | `Velo_amd64.rpm` |
-            | Linux (All distros) | `Velo_amd64.AppImage` |
-
-            **Linux AppImage** — 설치 없이 실행:
-  ```bash
-  chmod +x Velo_amd64.AppImage && ./Velo_amd64.AppImage
-  ```
-releaseDraft: true
-prerelease: true
-projectPath: '.'
-distPath: 'ui/dist'
-tauriScript: 'pnpm tauri'
-args: ${{ matrix.args }}
+          releaseName: Velo ${{ github.ref_name }}
+          releaseBody: "macOS Apple Silicon: Velo_aarch64.dmg | macOS Intel: Velo_x64.dmg | Windows: Velo_x64-setup.exe | Linux deb: Velo_amd64.deb | Linux rpm: Velo_amd64.rpm | Linux AppImage (all distros): Velo_amd64.AppImage"
+          releaseDraft: true
+          prerelease: true
+          projectPath: '.'
+          distPath: 'ui/dist'
+          tauriScript: 'pnpm tauri'
+          args: ${{ matrix.args }}
